@@ -63,6 +63,53 @@ class PolymarketClient:
         """Get order book for a token."""
         return self.client.get_order_book(token_id)
 
+    def analyze_orderbook(self, token_id: str) -> dict:
+        """Analyze order book depth, spread, and liquidity.
+
+        Returns dict with: spread, midpoint, bid_depth, ask_depth,
+        bid_wall (largest bid), ask_wall (largest ask), imbalance.
+        """
+        try:
+            book = self.client.get_order_book(token_id)
+        except Exception as e:
+            logger.warning("Failed to get orderbook for %s: %s", token_id, e)
+            return {}
+
+        bids = book.get("bids", [])
+        asks = book.get("asks", [])
+
+        if not bids or not asks:
+            return {"spread": 1.0, "midpoint": 0.5, "bid_depth": 0, "ask_depth": 0}
+
+        best_bid = float(bids[0].get("price", 0))
+        best_ask = float(asks[0].get("price", 1))
+        spread = best_ask - best_bid
+        midpoint = (best_bid + best_ask) / 2.0
+
+        # Total depth in USDC on each side (top 10 levels)
+        bid_depth = sum(
+            float(b.get("size", 0)) * float(b.get("price", 0))
+            for b in bids[:10]
+        )
+        ask_depth = sum(
+            float(a.get("size", 0)) * float(a.get("price", 0))
+            for a in asks[:10]
+        )
+
+        # Order imbalance: positive = more buy pressure
+        total = bid_depth + ask_depth
+        imbalance = (bid_depth - ask_depth) / total if total > 0 else 0
+
+        return {
+            "spread": spread,
+            "midpoint": midpoint,
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "bid_depth": bid_depth,
+            "ask_depth": ask_depth,
+            "imbalance": imbalance,
+        }
+
     def get_price(self, token_id: str, side: str = "buy") -> float:
         """Get current price for a token."""
         price = self.client.get_price(token_id, side)
