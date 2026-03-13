@@ -1,0 +1,6 @@
+# Compiled binaries
+sctpscan
+pcap_sctp
+fake-m3ua
+*.o
+*.i
