@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visionneuse Médias WordPress</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e8eaed;
+    --text-dim: #9aa1ac;
+    --accent: #5b8cff;
+    --accent-2: #ff7a5b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 16px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex: 1;
+    align-items: center;
+  }
+  input[type="text"], select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  #url-input { flex: 1; min-width: 220px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.secondary {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  #status {
+    padding: 10px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  #status.error { color: var(--accent-2); }
+  main {
+    padding: 20px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .thumb {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: var(--panel-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .thumb .icon {
+    font-size: 40px;
+    color: var(--text-dim);
+  }
+  .meta {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .meta .title {
+    color: var(--text);
+    font-size: 13px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    margin-right: 4px;
+  }
+  #empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 60px 20px;
+    display: none;
+  }
+  /* Lightbox */
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 100;
+    padding: 30px;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox .content {
+    max-width: 90vw;
+    max-height: 75vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #lightbox img, #lightbox video, #lightbox audio {
+    max-width: 90vw;
+    max-height: 75vh;
+    border-radius: 8px;
+  }
+  #lightbox .info {
+    margin-top: 14px;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+    max-width: 700px;
+  }
+  #lightbox .info a { color: var(--accent); }
+  #lightbox .close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 26px;
+    color: var(--text);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px 10px;
+  }
+  #lightbox .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text);
+    font-size: 22px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #lightbox .prev { left: 20px; }
+  #lightbox .next { right: 20px; }
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📁 Médias WP</h1>
+  <div class="controls">
+    <input type="text" id="url-input" value="https://www.lesdunes38.fr/wp-json/wp/v2/media?per_page=100" />
+    <select id="type-filter">
+      <option value="">Tous les types</option>
+      <option value="image">Images</option>
+      <option value="video">Vidéos</option>
+      <option value="audio">Audios</option>
+      <option value="application">Fichiers</option>
+    </select>
+    <button id="load-btn">Charger</button>
+    <button class="secondary" id="download-json-btn">Exporter JSON</button>
+  </div>
+</header>
+
+<div id="status">Prêt. Cliquez sur "Charger" pour récupérer les médias.</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+  <div id="empty">Aucun média trouvé.</div>
+</main>
+
+<footer>Visionneuse de médias WordPress — données via l'API REST <code>wp/v2/media</code></footer>
+
+<div id="lightbox">
+  <button class="close" id="lb-close">&times;</button>
+  <button class="nav prev" id="lb-prev">&#8249;</button>
+  <button class="nav next" id="lb-next">&#8250;</button>
+  <div class="content" id="lb-content"></div>
+  <div class="info" id="lb-info"></div>
+</div>
+
+<script>
+let items = [];
+let filtered = [];
+let currentIndex = -1;
+
+const grid = document.getElementById('grid');
+const emptyEl = document.getElementById('empty');
+const statusEl = document.getElementById('status');
+const urlInput = document.getElementById('url-input');
+const typeFilter = document.getElementById('type-filter');
+const loadBtn = document.getElementById('load-btn');
+const downloadBtn = document.getElementById('download-json-btn');
+
+const lightbox = document.getElementById('lightbox');
+const lbContent = document.getElementById('lb-content');
+const lbInfo = document.getElementById('lb-info');
+
+function setStatus(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className = isError ? 'error' : '';
+}
+
+function baseUrlWithoutPaging(rawUrl) {
+  const u = new URL(rawUrl);
+  u.searchParams.delete('page');
+  if (!u.searchParams.has('per_page')) u.searchParams.set('per_page', '100');
+  return u;
+}
+
+async function fetchAllPages(rawUrl) {
+  const base = baseUrlWithoutPaging(rawUrl);
+  let page = 1;
+  let all = [];
+  let totalPages = 1;
+
+  do {
+    base.searchParams.set('page', String(page));
+    setStatus(`Chargement de la page ${page}${totalPages > 1 ? ' / ' + totalPages : ''}...`);
+    const res = await fetch(base.toString(), { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    all = all.concat(data);
+    const tp = res.headers.get('X-WP-TotalPages');
+    if (tp) totalPages = parseInt(tp, 10) || 1;
+    page++;
+  } while (page <= totalPages);
+
+  return all;
+}
+
+function iconForMime(mime) {
+  if (!mime) return '📄';
+  if (mime.startsWith('video/')) return '🎬';
+  if (mime.startsWith('audio/')) return '🎵';
+  if (mime === 'application/pdf') return '📕';
+  if (mime.startsWith('application/')) return '📦';
+  return '📄';
+}
+
+function renderCard(item, index) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.index = index;
+
+  const thumb = document.createElement('div');
+  thumb.className = 'thumb';
+
+  const mediaType = item.media_type || '';
+  const mime = item.mime_type || '';
+  const sizes = (item.media_details && item.media_details.sizes) || {};
+  const thumbUrl =
+    (sizes.medium && sizes.medium.source_url) ||
+    (sizes.thumbnail && sizes.thumbnail.source_url) ||
+    (mediaType === 'image' ? item.source_url : null);
+
+  if (thumbUrl) {
+    const img = document.createElement('img');
+    img.src = thumbUrl;
+    img.loading = 'lazy';
+    img.alt = (item.alt_text || item.title?.rendered || '').replace(/<[^>]+>/g, '');
+    thumb.appendChild(img);
+  } else {
+    const icon = document.createElement('div');
+    icon.className = 'icon';
+    icon.textContent = iconForMime(mime);
+    thumb.appendChild(icon);
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = (item.title?.rendered || item.slug || 'Sans titre').replace(/<[^>]+>/g, '');
+
+  const badges = document.createElement('div');
+  const typeBadge = document.createElement('span');
+  typeBadge.className = 'badge';
+  typeBadge.textContent = mediaType || mime;
+  badges.appendChild(typeBadge);
+
+  if (item.media_details && item.media_details.width) {
+    const dimBadge = document.createElement('span');
+    dimBadge.className = 'badge';
+    dimBadge.textContent = `${item.media_details.width}×${item.media_details.height}`;
+    badges.appendChild(dimBadge);
+  }
+
+  const dateBadge = document.createElement('span');
+  dateBadge.className = 'badge';
+  dateBadge.textContent = (item.date || '').split('T')[0];
+  badges.appendChild(dateBadge);
+
+  meta.appendChild(title);
+  meta.appendChild(badges);
+
+  card.appendChild(thumb);
+  card.appendChild(meta);
+
+  card.addEventListener('click', () => openLightbox(index));
+
+  return card;
+}
+
+function renderGrid() {
+  grid.innerHTML = '';
+  const activeFilter = typeFilter.value;
+  filtered = items.filter(it => {
+    if (!activeFilter) return true;
+    if (activeFilter === 'application') {
+      return !['image', 'video', 'audio'].includes(it.media_type);
+    }
+    return it.media_type === activeFilter;
+  });
+
+  emptyEl.style.display = filtered.length === 0 ? 'block' : 'none';
+
+  filtered.forEach((item, idx) => {
+    grid.appendChild(renderCard(item, idx));
+  });
+}
+
+function openLightbox(index) {
+  currentIndex = index;
+  const item = filtered[index];
+  if (!item) return;
+
+  lbContent.innerHTML = '';
+  const mediaType = item.media_type;
+  const mime = item.mime_type || '';
+
+  if (mediaType === 'image') {
+    const img = document.createElement('img');
+    img.src = item.source_url;
+    lbContent.appendChild(img);
+  } else if (mime.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.src = item.source_url;
+    video.controls = true;
+    video.autoplay = true;
+    lbContent.appendChild(video);
+  } else if (mime.startsWith('audio/')) {
+    const audio = document.createElement('audio');
+    audio.src = item.source_url;
+    audio.controls = true;
+    audio.autoplay = true;
+    lbContent.appendChild(audio);
+  } else {
+    const link = document.createElement('a');
+    link.href = item.source_url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = `Ouvrir le fichier (${mime})`;
+    link.style.color = '#5b8cff';
+    link.style.fontSize = '18px';
+    lbContent.appendChild(link);
+  }
+
+  const title = (item.title?.rendered || '').replace(/<[^>]+>/g, '');
+  const caption = (item.caption?.rendered || '').replace(/<[^>]+>/g, '');
+  lbInfo.innerHTML = `
+    <div><strong>${title || 'Sans titre'}</strong></div>
+    ${caption ? `<div>${caption}</div>` : ''}
+    <div>${mime} — ${(item.date || '').split('T')[0]}</div>
+    <div><a href="${item.source_url}" target="_blank" rel="noopener noreferrer">Ouvrir l'original</a></div>
+  `;
+
+  lightbox.classList.add('open');
+}
+
+function closeLightbox() {
+  lightbox.classList.remove('open');
+  lbContent.innerHTML = '';
+}
+
+function showNext(offset) {
+  if (filtered.length === 0) return;
+  currentIndex = (currentIndex + offset + filtered.length) % filtered.length;
+  openLightbox(currentIndex);
+}
+
+document.getElementById('lb-close').addEventListener('click', closeLightbox);
+document.getElementById('lb-prev').addEventListener('click', () => showNext(-1));
+document.getElementById('lb-next').addEventListener('click', () => showNext(1));
+lightbox.addEventListener('click', (e) => {
+  if (e.target === lightbox) closeLightbox();
+});
+document.addEventListener('keydown', (e) => {
+  if (!lightbox.classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') showNext(-1);
+  if (e.key === 'ArrowRight') showNext(1);
+});
+
+async function loadMedia() {
+  const rawUrl = urlInput.value.trim();
+  if (!rawUrl) {
+    setStatus('Veuillez saisir une URL.', true);
+    return;
+  }
+  loadBtn.disabled = true;
+  try {
+    items = await fetchAllPages(rawUrl);
+    setStatus(`${items.length} média(s) chargé(s).`);
+    renderGrid();
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      `Erreur lors du chargement : ${err.message}. ` +
+      `Si l'erreur est liée au CORS, ouvrez ce fichier via un petit serveur local ou vérifiez que l'API autorise les requêtes cross-origin.`,
+      true
+    );
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!items.length) {
+    setStatus('Rien à exporter, chargez d\'abord les médias.', true);
+    return;
+  }
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'media.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+loadBtn.addEventListener('click', loadMedia);
+typeFilter.addEventListener('change', renderGrid);
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadMedia(); });
+
+// Auto-load on open
+loadMedia();
+</script>
+
+</body>
+</html>
