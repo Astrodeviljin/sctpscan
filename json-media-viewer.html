@@ -335,6 +335,8 @@ function setStatus(msg, kind) {
 }
 
 /* ---------- Tabs ---------- */
+let treeDirty = false;
+
 function showTab(name) {
   const isGallery = name === 'gallery';
   tabGallery.classList.toggle('active', isGallery);
@@ -343,6 +345,13 @@ function showTab(name) {
   viewTree.classList.toggle('active', !isGallery);
   treeSearch.style.display = isGallery ? 'none' : '';
   typeFilter.style.display = isGallery ? '' : 'none';
+  // The JSON tree can be large; only build its DOM the first time it's
+  // actually shown, instead of on every load while the user stays on
+  // the gallery tab.
+  if (!isGallery && treeDirty) {
+    treeDirty = false;
+    renderTree(treeSearch.value.trim());
+  }
 }
 tabGallery.addEventListener('click', () => showTab('gallery'));
 tabTree.addEventListener('click', () => showTab('tree'));
@@ -353,37 +362,48 @@ function looksLikeJson(text) {
   return t.startsWith('{') || t.startsWith('[');
 }
 
-async function fetchAllPages(rawUrl) {
-  const base = new URL(rawUrl);
-  base.searchParams.delete('page');
-  let page = 1;
-  let all = [];
-  let totalPages = 1;
-  let firstPayload = null;
-
-  do {
-    base.searchParams.set('page', String(page));
-    const urlToFetch = page === 1 && !base.searchParams.has('per_page') ? rawUrl : base.toString();
-    setStatus(`Chargement de la page ${page}${totalPages > 1 ? ' / ' + totalPages : ''}...`);
-    const res = await fetch(page === 1 ? rawUrl : base.toString(), { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    const data = await res.json();
-
-    if (page === 1) firstPayload = data;
-
-    const tp = res.headers.get('X-WP-TotalPages');
-    if (tp) totalPages = parseInt(tp, 10) || 1;
-
-    if (Array.isArray(data) && tp) {
-      all = all.concat(data);
-    } else {
-      // Not a WP-style paginated array: just use the first response as-is.
-      return data;
+async function mapLimit(items, limit, iteratee) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await iteratee(items[i]);
     }
-    page++;
-  } while (page <= totalPages);
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
-  return all;
+async function fetchAllPages(rawUrl) {
+  setStatus('Chargement...');
+  const res1 = await fetch(rawUrl, { headers: { 'Accept': 'application/json' } });
+  if (!res1.ok) throw new Error(`HTTP ${res1.status} ${res1.statusText}`);
+  const data1 = await res1.json();
+
+  const tp = res1.headers.get('X-WP-TotalPages');
+  const totalPages = tp ? (parseInt(tp, 10) || 1) : 1;
+  if (!Array.isArray(data1) || totalPages <= 1) return data1;
+
+  // WordPress-style pagination: fetch the remaining pages in parallel
+  // (bounded concurrency) instead of one-by-one, which is what made
+  // large media libraries slow to load.
+  const base = new URL(rawUrl);
+  const remaining = [];
+  for (let p = 2; p <= totalPages; p++) remaining.push(p);
+  let loaded = 1;
+  const pages = await mapLimit(remaining, 6, async (p) => {
+    const u = new URL(base);
+    u.searchParams.set('page', String(p));
+    const res = await fetch(u.toString(), { headers: { 'Accept': 'application/json' } });
+    loaded++;
+    setStatus(`Chargement des pages... (${loaded}/${totalPages})`);
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} (page ${p})`);
+    return { p, data: await res.json() };
+  });
+
+  pages.sort((a, b) => a.p - b.p);
+  return pages.reduce((acc, { data }) => acc.concat(data), data1.slice());
 }
 
 /* ---------- Media detection (recursive scan of arbitrary JSON) ---------- */
@@ -541,11 +561,13 @@ function renderCard(item, index) {
 }
 
 function renderGallery() {
-  grid.innerHTML = '';
   const activeFilter = typeFilter.value;
   filteredMedia = mediaItems.filter(it => !activeFilter || it.type === activeFilter);
   galleryEmpty.style.display = filteredMedia.length === 0 ? 'block' : 'none';
-  filteredMedia.forEach((item, idx) => grid.appendChild(renderCard(item, idx)));
+  const fragment = document.createDocumentFragment();
+  filteredMedia.forEach((item, idx) => fragment.appendChild(renderCard(item, idx)));
+  grid.innerHTML = '';
+  grid.appendChild(fragment);
 }
 
 function openLightbox(index) {
@@ -702,7 +724,12 @@ function processData(data) {
   findMediaUrls(data, '', found, new Set());
   mediaItems = dedupeVariants(found);
   renderGallery();
-  renderTree('');
+  treeSearch.value = '';
+  if (viewTree.classList.contains('active')) {
+    renderTree('');
+  } else {
+    treeDirty = true;
+  }
   const count = Array.isArray(data) ? data.length : (typeof data === 'object' ? Object.keys(data).length : 1);
   const hiddenVariants = found.length - mediaItems.length;
   const variantNote = hiddenVariants > 0 ? ` (${hiddenVariants} variante(s) de taille regroupée(s))` : '';
